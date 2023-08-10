@@ -84,15 +84,19 @@ which is 20 kilometer or more away from the station.
 <div style="text-align:center"><img src='img/All_Topo_25km.png' width=750></div>
 
 ### Spatial Analysis Results - Ring Metrics
-Neither the mean of the RMSE nor of the MAPE indicate that there is a clear correlation between
-deviation and increasing distance to the station. Especially the mean RMSE of the stations seem to be almost constant for different
-distances.
-
 <div style="text-align:center">
 <img src='img/Radius_0_50km_RMSE_MAPE.png' width=750>
 </div>
 
+Neither the mean of the RMSE nor of the MAPE indicate that there is a clear correlation between
+deviation and increasing distance to the station. Especially the mean RMSE of the stations seem to be almost constant for different
+distances.
+
 ### Temporal Analysis Results
+<div style="text-align:center">
+<img src='img/SLT_Cuxhaven_RMSE_5km_Analysiert.png' width=750>
+</div>
+
 The STL shows besides from smaller short term trends, no long-term changes in the data. Multiple short term trends of up to six month (market purple), do not form a clear
 pattern. The trend over a longer period of time can be described as neutral. Based on the trend component, our analysis cannot confirm a clear longterm increase or decrease of deviations between
 the station measurement and surrounding grid reference values. Short term trend could be a result of temporary climate phenomena.
@@ -100,10 +104,6 @@ With regard to seasonality, the following observations can be made: Around the m
 be recognized at some mid-year points (green). It can be assumed that the increasing deviations to the station that appear around
 that months of the year can be explained by the characteristics of
 the winter and summer months in Germany.
-
-<div style="text-align:center">
-<img src='img/SLT_Cuxhaven_RMSE_5km_Analysiert.png' width=750>
-</div>
 
 ### Built With
 * [![Pandas][Pandas-logo]][Pandas-url]
