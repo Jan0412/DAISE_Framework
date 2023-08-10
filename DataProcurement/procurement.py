@@ -2,11 +2,9 @@ import numpy as np
 import pandas as pd
 import sqlite3 as sql
 import xarray as xr
-import math
 
 import requests
 from io import BytesIO
-import re
 import zipfile
 import gzip
 import sys
@@ -14,9 +12,9 @@ import sys
 from datetime import datetime
 from bs4 import BeautifulSoup
 
+from DataAnalysis.utilities import *
 
 # TODO Use streams instead of requests.get
-# TODO Solution for base url
 
 def getStationDescription(url: str, path: str) -> bool:
     sys.stdout.write(f'\r Download {url} ...')
@@ -67,29 +65,6 @@ def createTable(cursor: sql.Connection, tablename: str) -> None:
             Stationsname VARCHAR(50),
             Bundesland VARCHAR(50))
     ''')
-
-
-def dateToDate(date_DWD_format) -> datetime:
-    digits = int(math.log10(int(date_DWD_format)) + 1)
-
-    if digits == 8:
-        date = datetime.strptime(date_DWD_format, '%Y%m%d')
-    else:
-        date = datetime.strptime(date_DWD_format, '%Y%m%d%H%M')
-
-    return date
-
-
-def dateToDatetime64(date_DWD_format) -> np.datetime64:
-    return np.datetime64(dateToDate(date_DWD_format=date_DWD_format))
-
-
-def dateToTimestamp(date_DWD_format) -> float:
-    return dateToDate(date_DWD_format=date_DWD_format).timestamp()
-
-
-def removeBrackets(s) -> str:
-    return re.sub('\(.*?\)', '', s)
 
 
 def stationDescriptionToDB(connection, path, table_name) -> None:
@@ -189,16 +164,6 @@ def getStationDataset(url, station_id: int) -> pd.DataFrame:
     return df_histo
 
 
-def cleanString(s: str) -> str:
-    special_char_map = {ord('ä'): 'ae', ord('Ä'): 'Ae',
-                        ord('ü'): 'ue', ord('Ü'): 'Ue',
-                        ord('ö'): 'oe', ord('Ö'): 'Oe',
-                        ord('ß'): 'ss',
-                        ord('-'): '_', ord('/'): '_', ord('.'): '_'}
-
-    return s.translate(special_char_map)
-
-
 def stationsToDB(connection: sql.Connection, url, download_param: str=None, value=None) -> None:
     df = pd.read_sql(sql=f'''SELECT * FROM Beschreibung_Stationen''', con=connection)
 
@@ -276,10 +241,6 @@ def databaseToXarray(tables: list, start_date, end_date, connection: sql.Connect
     return ds
 
 
-def XarrayToNetCDF(path: str, xarray) -> None:
-    xarray.to_netcdf(path=path)
-
-
 def downloadAllNCs(url: str, path: str, start_year, end_year):
     page = requests.get(url=url)
     soup = BeautifulSoup(page.content, 'html.parser')
@@ -302,9 +263,3 @@ def downloadAllNCs(url: str, path: str, start_year, end_year):
 
                 sys.stdout.write(f'\rDownload file: {file} Done\n')
                 sys.stdout.flush()
-
-
-
-
-
-
