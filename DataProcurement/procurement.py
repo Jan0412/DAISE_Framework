@@ -44,7 +44,7 @@ def getStationDescription(url: str, path: str) -> bool:
     return True
 
 
-def checkTableExists(cursor: sql.Connection, tablename: str) -> bool:
+def checkIfTableExists(cursor: sql.Connection, tablename: str) -> bool:
     tables = cursor.execute(f'''
                 SELECT name FROM sqlite_master WHERE type=\'table\' AND name=\'{tablename}\'
             ''')
@@ -96,13 +96,13 @@ def stationDescriptionToDB(connection, path, table_name) -> None:
     cursor = connection.cursor()
 
     try:
-        if checkTableExists(cursor=cursor, tablename=table_name):
+        if checkIfTableExists(cursor=cursor, tablename=table_name):
             return
         else:
             createTable(cursor=cursor, tablename=table_name)
             connection.commit()
 
-            if not checkTableExists(cursor=cursor, tablename=table_name):
+            if not checkIfTableExists(cursor=cursor, tablename=table_name):
                 raise f'Error: Not able to create Table {table_name}'
 
         with open(file=path, mode='r', encoding="ISO-8859-1") as file:
