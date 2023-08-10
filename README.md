@@ -127,10 +127,13 @@ the winter and summer months in Germany.
 
 
 ## Usage
+```
+Usage: main.py [OPTIONS]
 
+Options:
 
+```
 ## References
-
 
 
 ## Contact
