@@ -45,12 +45,12 @@ Germany.
 We divide our comparative analysis between the station dataset and the gridded dataset into a spatial and a temporal analysis.
 
 ### Spatial Analysis
-The spatial analysis is split into a local visual inspection, where
-we analyze the immediate area around a station using a heat map,
-and a comparative analysis, where we define a deviation metric
-for a specific station and radius so that we can analyze how the
-deviations for the different stations change with distance and angle
-from the station.
+The spatial analysis is split into a local visual inspection, where we analyze the immediate area around a station using a heat map,
+and a comparative analysis, where we define a deviation metric for a specific station and radius so that we can analyze how the
+deviations for the different stations change with distance and angle from the station.
+In order to calculate the difference between two different wind speed data sources over a given period of
+time - in our case, the difference between the measurements at a weather station and the reference value at a near grid point - we
+resort to the classical and frequently used root mean squared error (RMSE) and mean absolute percentage error (MAPE)
 
 <div style="text-align:center">
 <img src='img/multiple_rings.jpg' width=400>
@@ -58,13 +58,11 @@ from the station.
 </div>
 
 ### Temporal analysis
-The spatial analysis ignores changes in deviation over time, since
-we take the mean over the time dimension to get one value that
+The spatial analysis ignores changes in deviation over time, since we take the mean over the time dimension to get one value that
 allows for comparisons between rings with different radiuses or
 different stations. In order to perform a temporal analysis of the deviation between a station and the grid points in the surrounding
 region, we calculate the RMSE and MAPE for every time step t. Then, we perform a seasonal
-trend decomposition (STL) for the 𝑅𝑀𝑆𝐸𝑡 and and 𝑀𝐴𝑃𝐸𝑡 to check
-for possible seasonal effects in the deviation between the station
+trend decomposition (STL) for the 𝑅𝑀𝑆𝐸𝑡 and 𝑀𝐴𝑃𝐸𝑡 to check for possible seasonal effects in the deviation between the station
 measurements and the surrounding grid points.
 
 
@@ -81,16 +79,29 @@ differs significantly between the stations. Furthermore, at least according to t
 grid point is away from the station. This would indicate that a grid point close to the actual station represents the station’s measurement just as good as a grid point
 which is 20 kilometer or more away from the station.
 
-<div style="text-align:center"><img src='img/All_Topo_25km.png' width=750></div>
+<div style="text-align:center"><img src='img/All_Topo_25km.png' width=650></div>
+
+The region around Cuxhaven lies directly on the sea with no notable elevations. Both the RM-
+SEs and MAPEs for Cuxhaven are similarly homogeneous to the topography. Mannheim is also rather flat; only the foothills of the
+Vosges (left) and the Black Forest (right) can be seen just outside the 25 kilometer radius. At least in the deviation heat map, these
+mountains do not seem to have any influence on the deviations in the 25 kilometer radius. The situation is different for the stations at
+the Brocken and in Munich. At Brocken, there seems to be much smaller deviations (6 m/s vs 8-10 m/s RMSE) at the edge parallel to
+the valley (in the upper right map section). At the Munich station, on the other hand, the two alpine foothills seem to correlate with a
+significantly higher deviation (2-4 m/s vs almost 10 m/s RMSE).
 
 ### Spatial Analysis Results - Ring Metrics
 <div style="text-align:center">
-<img src='img/Radius_0_50km_RMSE_MAPE.png' width=750>
+<img src='img/Radius_0_50km_RMSE_MAPE.png' width=650>
 </div>
 
 Neither the mean of the RMSE nor of the MAPE indicate that there is a clear correlation between
 deviation and increasing distance to the station. Especially the mean RMSE of the stations seem to be almost constant for different
-distances.
+distances. For Mannheim and München, RMSE is almost constant at around 1.5 m/s and Cuxhaven lays slightly above with around 3
+m/s. Brocken RMSE is also constant with radius, but at a significant higher level of around 10 m/s.
+The standard deviation of the RMSE of the station at Broken makes a larger jump at about five kilometers. Overall, the RMSE
+standard deviation at the Broken station for the entire 50 kilometer is higher by about the magnitude by which the mean also differs
+from that of the other station. This spike in the standard deviation at about 5 kilometers from the Broken station could indicate a change
+in topography, so that the RMSE in the ring deviates more from the mean here.
 
 ### Temporal Analysis Results
 <div style="text-align:center">
