@@ -1,0 +1,4 @@
+dwd_station_url: 'https://opendata.dwd.de/climate_environment/CDC/observations_germany/climate/10_minutes/wind_test/historical/'
+
+
+station_wind_speed_table_name: 'WindData.db'
