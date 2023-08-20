@@ -1,4 +1,7 @@
 dwd_station_url: 'https://opendata.dwd.de/climate_environment/CDC/observations_germany/climate/10_minutes/wind_test/historical/'
+dwd_try_url: 'https://opendata.dwd.de/climate_environment/CDC/grids_germany/hourly/Project_TRY/wind_speed/'
 dwd_station_description: 'zehn_min_ffs_Beschreibung_Stationen.txt'
 
 station_wind_speed_db_name: 'WindData.db'
+
+standard_station_download_param: 'Bundesland'
