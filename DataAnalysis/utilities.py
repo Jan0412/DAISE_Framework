@@ -1,7 +1,22 @@
-import datetime
 import math
 import re
+import sqlite3 as sql
 import numpy as np
+
+from datetime import datetime
+
+
+def getAllTables(connection: sql.Connection) -> list:
+    cursor = connection.cursor()
+
+    sql_query = '''SELECT * FROM sqlite_master WHERE type=\'table\' '''
+    cursor.execute(sql_query)
+
+    result = [row[1] for row in cursor.fetchall()]
+
+    cursor.close()
+
+    return result
 
 
 def dateToDate(date_DWD_format) -> datetime:
@@ -35,6 +50,7 @@ def cleanString(s: str) -> str:
                         ord('-'): '_', ord('/'): '_', ord('.'): '_'}
 
     return s.translate(special_char_map)
+
 
 def XarrayToNetCDF(path: str, xarray) -> None:
     xarray.to_netcdf(path=path)
