@@ -8,13 +8,12 @@ from io import BytesIO
 import zipfile
 import gzip
 import sys
+from threading import Thread
 
-from datetime import datetime
 from bs4 import BeautifulSoup
 
 from DataAnalysis.utilities import *
 
-# TODO Use streams instead of requests.get
 
 def getStationDescription(url: str, path: str) -> bool:
     sys.stdout.write(f'\r Download {url} ...')
@@ -53,9 +52,9 @@ def checkIfTableExists(cursor: sql.Connection, tablename: str) -> bool:
     return False
 
 
-def createTable(cursor: sql.Connection, tablename: str) -> None:
-    cursor.execute(f'''
-        CREATE TABLE IF NOT EXISTS {tablename} (
+def createTable(cursor: sql.Connection, table_name: str) -> None:
+    sql_query = f'''
+        CREATE TABLE IF NOT EXISTS {table_name} (
             Stations_id INTEGER PRIMARY KEY,
             von_datum DATE,
             bis_datum DATE,
@@ -64,7 +63,9 @@ def createTable(cursor: sql.Connection, tablename: str) -> None:
             geoLaenge FLOAT,
             Stationsname VARCHAR(50),
             Bundesland VARCHAR(50))
-    ''')
+    '''
+
+    cursor.execute(sql_query)
 
 
 def stationDescriptionToDB(connection, path, table_name) -> None:
@@ -74,7 +75,7 @@ def stationDescriptionToDB(connection, path, table_name) -> None:
         if checkIfTableExists(cursor=cursor, tablename=table_name):
             return
         else:
-            createTable(cursor=cursor, tablename=table_name)
+            createTable(cursor=cursor, table_name=table_name)
             connection.commit()
 
             if not checkIfTableExists(cursor=cursor, tablename=table_name):
@@ -95,13 +96,15 @@ def stationDescriptionToDB(connection, path, table_name) -> None:
                 station_name = cleanString(s=station_name)
                 bundesland = cleanString(s=bundesland)
 
-                cursor.execute(f'''
+                sql_query = f'''
                     INSERT INTO {table_name}
                     ({', '.join(col_name)})
                     VALUES 
                     ({int(station_id)}, {dateToTimestamp(start_date)}, {dateToTimestamp(stop_date)}, {int(stations_hoehe)},
                      {float(geo_breite)}, {float(geo_laenge)}, \'{str(station_name)}\', \'{str(bundesland)}\')
-                ''')
+                '''
+
+                cursor.execute(sql_query)
                 connection.commit()
 
             file.close()
@@ -125,6 +128,9 @@ def getAllDatasource(url: str, station_id=None) -> list[str]:
 
 
 def downloadZipAndUnzip(file_url: str) -> pd.DataFrame:
+    sys.stdout.write(f'\rDownload and unzip file: {file_url} ...')
+    sys.stdout.flush()
+
     response = requests.get(url=file_url, stream=True)
 
     zip_file = BytesIO(response.content)
@@ -135,36 +141,45 @@ def downloadZipAndUnzip(file_url: str) -> pd.DataFrame:
 
     df = pd.read_csv(files.open(files.namelist()[0]), delimiter=';')
 
+    sys.stdout.write(f'\rDownload and unzip file: {file_url} Done\n')
+    sys.stdout.flush()
+
     return df
+
+
+def thread_helper(file_url: str, result: list, thread_idx: int):
+    station_histo = downloadZipAndUnzip(file_url=file_url)
+
+    station_histo['time'] = station_histo['MESS_DATUM'].apply(lambda date: dateToDatetime64(date_DWD_format=str(date)))
+    station_histo['timestamp'] = station_histo['MESS_DATUM'].apply(lambda date: dateToTimestamp(date_DWD_format=str(date)))
+    station_histo.drop(columns='MESS_DATUM', inplace=True)
+
+    result[thread_idx] = station_histo
 
 
 def getStationDataset(url, station_id: int) -> pd.DataFrame:
     files = getAllDatasource(url=url, station_id=station_id)
-    file_url = url + files[0]
 
-    sys.stdout.write(f'\rDownload and unzip file: {files[0]} ...')
-    sys.stdout.flush()
+    result = np.empty(shape=len(files), dtype=pd.DataFrame)
+    threads = []
+    for idx, file in enumerate(files):
+        thread = Thread(target=thread_helper, args=(url + file, result, idx))
+        threads.append(thread)
+        thread.start()
 
-    df_histo = downloadZipAndUnzip(file_url=file_url)
+    for thread in threads:
+        thread.join()
 
-    sys.stdout.write(f'\rDownload and unzip file: {files[0]} Done\n')
-    sys.stdout.flush()
-
-    for file in files[1:]:
-        sys.stdout.write(f'\rDownload and unzip file: {file}...')
-        sys.stdout.flush()
-
-        new_df = downloadZipAndUnzip(file_url=url + file)
-
-        df_histo = pd.concat(objs=[df_histo, new_df], ignore_index=True)
-
-        sys.stdout.write(f'\rDownload and unzip file: {file} Done\n')
-        sys.stdout.flush()
+    df_histo = pd.concat(objs=result, ignore_index=True)
 
     return df_histo
 
 
-def stationsToDB(connection: sql.Connection, url, download_param: str=None, value=None) -> None:
+def stationsToDB(connection: sql.Connection, url, download_param: str = None, value=None,
+                 if_exists: str = 'continue') -> None:
+    if if_exists not in ['continue', 'ignore']:
+        raise f'Error: invalid argument for \"if_exists\"'
+
     df = pd.read_sql(sql=f'''SELECT * FROM Beschreibung_Stationen''', con=connection)
 
     if download_param is not None and value is not None:
@@ -175,27 +190,26 @@ def stationsToDB(connection: sql.Connection, url, download_param: str=None, valu
 
     station_ids = df[['Stations_id', 'Stationsname', 'Bundesland']].values
 
+    all_existing_tables = getAllTables(connection=connection)
+
     download_count = 1
     for station_id, name, bundesland in station_ids:
-        station_histo: pd.DataFrame = getStationDataset(url=url, station_id=station_id)
-
         table_name = f'Station{str(station_id).zfill(5)}_{cleanString(name)}_{cleanString(bundesland)}'
 
-        sys.stdout.write(
-            f'\rWriting Station {station_id}-{name}-{bundesland} into {table_name} -> [{download_count} / {len(station_ids)}] ...')
-        sys.stdout.flush()
+        if if_exists == 'continue' and table_name not in all_existing_tables:
+            station_histo: pd.DataFrame = getStationDataset(url=url, station_id=station_id)
 
-        station_histo['time'] = station_histo['MESS_DATUM'].apply(lambda date: dateToDatetime64(date_DWD_format=str(date)))
-        station_histo['timestamp'] = station_histo['MESS_DATUM'].apply(lambda date: dateToTimestamp(date_DWD_format=str(date)))
-        station_histo.drop(columns='MESS_DATUM', inplace=True)
+            sys.stdout.write(
+                f'\rWriting Station {station_id}-{name}-{bundesland} into {table_name} -> [{download_count} / {len(station_ids)}] ...')
+            sys.stdout.flush()
 
-        station_histo.to_sql(name=table_name, con=connection, if_exists='fail', index=False)
+            station_histo.to_sql(name=table_name, con=connection, if_exists='fail', index=False)
 
-        sys.stdout.write(
-            f'\rWriting Station {station_id}-{name}-{bundesland} into {table_name} -> [{download_count} / {len(station_ids)}] Done\n\n')
-        sys.stdout.flush()
+            sys.stdout.write(
+                f'\rWriting Station {station_id}-{name}-{bundesland} into {table_name} -> [{download_count} / {len(station_ids)}] Done\n\n')
+            sys.stdout.flush()
 
-        download_count += 1
+            download_count += 1
 
 
 def databaseToXarray(tables: list, start_date, end_date, connection: sql.Connection):
@@ -236,7 +250,8 @@ def databaseToXarray(tables: list, start_date, end_date, connection: sql.Connect
     ds['latitude'].attrs = {'units': 'degrees_north', 'long_name': 'latitude'}
     ds['speed'].attrs = {'units': 'm/s', 'long_name': 'wind component'}
     ds['direction'].attrs = {'units': 'degrees'}
-    ds.attrs = {'creation_date': datetime.now().strftime("%m.%d.%Y, %H:%M:%S"), 'author': 'Dieter', 'email': 'address@email.com'}
+    ds.attrs = {'creation_date': datetime.now().strftime("%m.%d.%Y, %H:%M:%S"), 'author': 'Dieter',
+                'email': 'address@email.com'}
 
     return ds
 
