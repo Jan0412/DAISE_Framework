@@ -1,16 +1,15 @@
-import numpy as np
 import pandas as pd
-import sqlite3 as sql
-import xarray as xr
 
 import requests
+from bs4 import BeautifulSoup
+
 from io import BytesIO
 import zipfile
 import gzip
 import sys
+import os
 from threading import Thread
-
-from bs4 import BeautifulSoup
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from DataAnalysis.utilities import *
 
@@ -147,7 +146,7 @@ def downloadZipAndUnzip(file_url: str) -> pd.DataFrame:
     return df
 
 
-def thread_helper(file_url: str, result: list, thread_idx: int):
+def thread_helper_station(file_url: str, result: list, thread_idx: int):
     station_histo = downloadZipAndUnzip(file_url=file_url)
 
     station_histo['time'] = station_histo['MESS_DATUM'].apply(lambda date: dateToDatetime64(date_DWD_format=str(date)))
@@ -163,7 +162,7 @@ def getStationDataset(url, station_id: int) -> pd.DataFrame:
     result = np.empty(shape=len(files), dtype=pd.DataFrame)
     threads = []
     for idx, file in enumerate(files):
-        thread = Thread(target=thread_helper, args=(url + file, result, idx))
+        thread = Thread(target=thread_helper_station, args=(url + file, result, idx))
         threads.append(thread)
         thread.start()
 
@@ -256,25 +255,37 @@ def databaseToXarray(tables: list, start_date, end_date, connection: sql.Connect
     return ds
 
 
+def thread_helper_NC(url: str, path: str, file: str):
+    sys.stdout.write(f'\rDownload file: {file} ...')
+    sys.stdout.flush()
+
+    response = requests.get(url=url + file, stream=True)
+    compressed_file = BytesIO(response.content)
+    decompressed_file = gzip.GzipFile(fileobj=compressed_file)
+
+    with open(path + file[:-3], 'wb') as outfile:
+        ret_val = outfile.write(decompressed_file.read())
+        outfile.close()
+
+    sys.stdout.write(f'\rDownload file: {file} Done\n')
+    sys.stdout.flush()
+
+    return ret_val
+
+
 def downloadAllNCs(url: str, path: str, start_year, end_year):
     page = requests.get(url=url)
     soup = BeautifulSoup(page.content, 'html.parser')
 
-    files = [a['href'] for a in soup.find_all('a') if '.nc' in a['href']]
+    files = []
+    for a in soup.find_all('a'):
+        file = a['href']
+        if '.nc' in file and start_year <= int(file[3:9]) <= end_year:
+            if not os.path.isfile(path + file[:-3]):
+                files.append(file)
 
-    for file in files:
-        for y in range(start_year, end_year + 1):
-            if str(y) in file:
-                sys.stdout.write(f'\rDownload file: {file} ...')
-                sys.stdout.flush()
-
-                response = requests.get(url=url + file, stream=True)
-                compressed_file = BytesIO(response.content)
-                decompressed_file = gzip.GzipFile(fileobj=compressed_file)
-
-                with open(path + file[:-3], 'wb') as outfile:
-                    outfile.write(decompressed_file.read())
-                    outfile.close()
-
-                sys.stdout.write(f'\rDownload file: {file} Done\n')
-                sys.stdout.flush()
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        tasks = {executor.submit(thread_helper_NC, url, path, file): file for file in files}
+        for task in as_completed(tasks):
+            if task.result() <= 0:
+                print(f'Failed to download {tasks[task]}')
