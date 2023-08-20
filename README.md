@@ -131,6 +131,12 @@ the winter and summer months in Germany.
 Usage: main.py [OPTIONS]
 
 Options:
+options:
+  -h, --help            show this help message and exit
+  -ds DOWNLOAD_STATION_DATASET, --download_station_dataset DOWNLOAD_STATION_DATASET
+                        Download all station tables based on the Bundesland (default: None)
+  -dg DOWNLOAD_TRY_DATASET, --download_try_dataset DOWNLOAD_TRY_DATASET
+                        Download the TRY dataset for a given period. Formal must be "<from year>-<to year>" (default: None)
 
 ```
 ## References
