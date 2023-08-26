@@ -3,6 +3,7 @@ import re
 
 import sqlite3 as sql
 import numpy as np
+import pandas as pd
 import xarray as xr
 
 from datetime import datetime
@@ -92,7 +93,7 @@ def to_coordinate(lat_station, lon_station, dwd_ds):
     return dwd_ds['X'][lon_x].values, dwd_ds['Y'][lat_y].values
 
 
-def station_to_dwd_grid(df, lat_station, lon_station, dwd_ds, radius):
+def station_to_dwd_grid(df: pd.DataFrame, lat_station, lon_station, dwd_ds, radius):
     station_grid = []
     shape = (dwd_ds.dims.get('Y'), dwd_ds.dims.get('X'))
 
@@ -116,6 +117,7 @@ def calc_mean_absolute_deviation(first: xr.DataArray, second: xr.DataArray, x_ke
     da_div = calc_absolute_deviation(first=first, second=second, x_key=x_key, y_key=y_key)
     da_mean = da_div.mean(dim='time')
     da_mean = da_mean.rename(AE='MAE')
+
     return da_mean
 
 
@@ -123,6 +125,7 @@ def calc_mean_absolute_percentage_deviation(first: xr.DataArray, second: xr.Data
     da_div = calc_absolute_percentage_deviation(first=first, second=second, x_key=x_key, y_key=y_key)
     da_mean = da_div.mean(dim='time')
     da_mean = da_mean.rename(APE='MAPE')
+
     return da_mean
 
 
@@ -130,6 +133,7 @@ def calc_mean_square_deviation(first: xr.DataArray, second: xr.DataArray, x_key:
     da_div = calc_square_deviation(first=first, second=second, x_key=x_key, y_key=y_key)
     da_mean = da_div.mean(dim='time')
     da_mean = da_mean.rename(SE='MSE')
+
     return da_mean
 
 
@@ -138,11 +142,12 @@ def calc_root_mean_square_deviation(first: xr.DataArray, second: xr.DataArray, x
     da_mean = da_div.mean(dim='time')
     da_mean = da_mean ** (1/2)
     da_mean = da_mean.rename(SE='RMSE')
+
     return da_mean
 
 
 def pre_calc(first: xr.DataArray, second: xr.DataArray, x_key: str, y_key: str):
-    if first.sizes.get(x_key) != second.sizes.get(x_key):
+    if first.sizes.get(x_key) != second.sizes.get(y_key):
         print(f'{np.shape(first)} != {np.shape(second)}')
         raise f'{np.shape(first)} != {np.shape(second)}'
 
@@ -155,7 +160,7 @@ def pre_calc(first: xr.DataArray, second: xr.DataArray, x_key: str, y_key: str):
     return first, second
 
 
-def calc_absolute_deviation(first: xr.DataArray, second: xr.DataArray, x_key: str, y_key: str):
+def calc_absolute_deviation(first: xr.DataArray, second: xr.DataArray, x_key: str, y_key: str) -> xr.Dataset:
     x_coord, y_coord = first[x_key], first[y_key]
 
     first, second = pre_calc(first=first, second=second, x_key=x_key, y_key=y_key)
@@ -164,13 +169,13 @@ def calc_absolute_deviation(first: xr.DataArray, second: xr.DataArray, x_key: st
     for f, s in zip(first, second):
         diff_ary.append(np.abs(f - s))
 
-    da_div = xr.Dataset(data_vars=dict(AE=(['time', y_key, x_key], diff_ary)),
+    ds_div = xr.Dataset(data_vars=dict(AE=(['time', y_key, x_key], diff_ary)),
                         coords={'time': first['time'], x_key: x_coord, y_key: y_coord})
 
-    return da_div
+    return ds_div
 
 
-def calc_absolute_percentage_deviation(first: xr.DataArray, second: xr.DataArray, x_key: str, y_key: str):
+def calc_absolute_percentage_deviation(first: xr.DataArray, second: xr.DataArray, x_key: str, y_key: str) -> xr.Dataset:
     x_coord, y_coord = first[x_key], first[y_key]
 
     first, second = pre_calc(first=first, second=second, x_key=x_key, y_key=y_key)
@@ -180,13 +185,13 @@ def calc_absolute_percentage_deviation(first: xr.DataArray, second: xr.DataArray
         tmp = (np.abs(f - s) / s) * 100
         diff_ary.append(tmp)
 
-    da_div = xr.Dataset(data_vars=dict(APE=(['time', y_key, x_key], diff_ary)),
+    ds_div = xr.Dataset(data_vars=dict(APE=(['time', y_key, x_key], diff_ary)),
                         coords={'time': first['time'], x_key: x_coord, y_key: y_coord})
 
-    return da_div
+    return ds_div
 
 
-def calc_square_deviation(first: xr.DataArray, second: xr.DataArray, x_key: str, y_key: str):
+def calc_square_deviation(first: xr.DataArray, second: xr.DataArray, x_key: str, y_key: str) -> xr.Dataset:
     x_coord, y_coord = first[x_key], first[y_key]
 
     first, second = pre_calc(first=first, second=second, x_key=x_key, y_key=y_key)
@@ -195,10 +200,10 @@ def calc_square_deviation(first: xr.DataArray, second: xr.DataArray, x_key: str,
     for f, s in zip(first, second):
         diff_ary.append((f - s) ** 2)
 
-    da_div = xr.Dataset(data_vars=dict(SE=(['time', y_key, x_key], diff_ary)),
+    ds_div = xr.Dataset(data_vars=dict(SE=(['time', y_key, x_key], diff_ary)),
                         coords={'time': first['time'], x_key: x_coord, y_key: y_coord})
 
-    return da_div
+    return ds_div
 
 
 def single_station_to_grid(data, lat, long) -> xr.Dataset:
