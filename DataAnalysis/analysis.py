@@ -161,3 +161,95 @@ class AnalysisBuilder(object):
                 continue
 
 
+class SpatialAnalysis(AnalysisBuilder):
+    _ds_station_grid: xr.Dataset = None
+    _total_area_metrics: dict = {}
+
+    def __int__(self, parameters: dict) -> None:
+        super(SpatialAnalysis, self).__int__(parameters=parameters)
+
+    def perform_ring_analysis(self, ring: tuple, keys: list[str], lon, lat) -> dict:
+        x, y = to_coordinate(lat_station=lat, lon_station=lon, dwd_ds=self._ds_station_grid)
+
+        outer_mask = calc_mask(dwd_ds=self._ds_station_grid, x=x, y=y, radius=ring[1])
+
+        if ring[0] > 0:
+            inner_mask = calc_mask(dwd_ds=self._ds_station_grid, x=x, y=y, radius=ring[0])
+            mask = outer_mask & ~inner_mask
+        else:
+            mask = outer_mask
+
+        ring_result = {}
+        for key in keys:
+            masked = self._total_area_metrics[key].where(cond=mask, drop=True)
+            masked = np.asarray(masked[key])
+            masked = masked[~np.isnan(masked)]
+
+            ring_result.update({key: masked})
+
+        return ring_result
+
+    def spatial_analysis(self, func_param: dict, kwargs: dict) -> dict:
+        radius_ary = np.arange(kwargs['radius_start'], kwargs['radius_end'], kwargs['radius_step'])
+        rings = np.asarray([(inner, outer) for inner, outer in zip(radius_ary[:-1], radius_ary[1:])])
+
+        self._ds_station_grid = station_to_dwd_grid(df=func_param['df'],
+                                                    lat_station=func_param['latitude'],
+                                                    lon_station=func_param['longitude'],
+                                                    dwd_ds=func_param['ds'], radius=kwargs['radius_end'])
+
+        for key, value in self.metrics_build_plan.items():
+            tmp_metric_result = value[0](func_param['ds']['FF'], self._ds_station_grid['FF'], 'X', 'Y')
+            self._total_area_metrics.update({key: tmp_metric_result})
+
+        result = {key: [None for _ in range(len(rings))] for key in list(self.metrics_build_plan)}
+        if self.thread_count == 1:
+            for i, ring in enumerate(rings):
+                tmp_result = self.perform_ring_analysis(ring,
+                                                        list(self.metrics_build_plan),
+                                                        func_param['longitude'],
+                                                        func_param['latitude'])
+                for key in result.keys():
+                    result[key][i] = tmp_result[key]
+
+        elif self.thread_count > 1:
+            with ThreadPoolExecutor(max_workers=8) as executor:
+                tasks = {executor.submit(self.perform_ring_analysis,
+                                         ring,
+                                         list(self.metrics_build_plan),
+                                         func_param['longitude'],
+                                         func_param['latitude']): ring for ring in rings
+                         }
+
+                for task in as_completed(tasks):
+                    for key in result.keys():
+                        result[key][task] = task.result()[key]
+
+        else:
+            raise ''
+
+        for key in result.keys():
+            result[key] = np.asarray(result[key]).flatten()
+
+        result.update({'index': rings[:, 1]})
+
+        return result
+
+    def after_each_station(self, result, parameters):
+        for key, value in self.metrics_build_plan.items():
+            metric_result = result[key]
+            metric_result = np.asarray(metric_result)
+            metric_result = metric_result.flatten()
+
+            for func in value[1:]:
+                metric_result = func(metric_result)
+
+            result[key] = metric_result
+
+        df_result = pd.DataFrame.from_dict(result)
+        df_result.index = result['index']
+
+        df_result.to_feather(path=parameters['result_path'])
+
+    def run_analysis(self, **kwargs):
+        super().run_analysis(func=self.spatial_analysis, after_each_station=self.after_each_station, kwargs=kwargs)
